@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Foundry CRM Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: #f7f8fa;
+        }
+        .widget {
+            background: #fff;
+            border: 1px solid #d0d7de;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+        }
+        textarea,
+        button,
+        pre {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 96px;
+            margin: 12px 0;
+            padding: 12px;
+            resize: vertical;
+        }
+        button {
+            border: 0;
+            border-radius: 8px;
+            padding: 12px;
+            background: #2563eb;
+            color: #fff;
+            cursor: pointer;
+        }
+        pre {
+            min-height: 96px;
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #0f172a;
+            color: #e2e8f0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="widget">
+        <strong>Foundry CRM Assistant</strong>
+        <p>Ask about the record you are viewing and the connected Fabric data.</p>
+        <textarea id="user-message" placeholder="What should I know about this customer?"></textarea>
+        <button id="send-message">Ask Foundry</button>
+        <pre id="assistant-response">Waiting for your first question…</pre>
+    </div>
+
+    <script>
+        const responseNode = document.getElementById("assistant-response");
+        const messageNode = document.getElementById("user-message");
+        const buttonNode = document.getElementById("send-message");
+
+        let currentThreadId = null;
+        let latestContext = {};
+
+        function getSameOriginFallbackContext() {
+            try {
+                return {
+                    current_page_url: window.parent.location.href,
+                    document_title: window.parent.document.title
+                };
+            } catch (error) {
+                return {};
+            }
+        }
+
+        window.addEventListener("message", (event) => {
+            if (!event.data || event.data.type !== "crm-context") {
+                return;
+            }
+
+            latestContext = {
+                ...latestContext,
+                ...event.data.payload,
+                parent_origin: event.origin
+            };
+        });
+
+        async function askFoundry() {
+            const message = messageNode.value.trim();
+            if (!message) {
+                return;
+            }
+
+            buttonNode.disabled = true;
+            responseNode.textContent = "Loading…";
+
+            try {
+                const response = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        message,
+                        thread_id: currentThreadId,
+                        webpage_context: {
+                            ...getSameOriginFallbackContext(),
+                            ...latestContext,
+                            iframe_url: window.location.href,
+                            viewed_at_timestamp: new Date().toISOString()
+                        }
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || "The Foundry request failed.");
+                }
+
+                currentThreadId = data.thread_id;
+                responseNode.textContent = data.response;
+            } catch (error) {
+                responseNode.textContent = error.message;
+            } finally {
+                buttonNode.disabled = false;
+            }
+        }
+
+        buttonNode.addEventListener("click", askFoundry);
+        messageNode.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                askFoundry();
+            }
+        });
+    </script>
+</body>
+</html>
