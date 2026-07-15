@@ -42,6 +42,7 @@ class ChatRequest(BaseModel):
 
 
 def get_project_client() -> AIProjectClient:
+    # Read the Foundry project endpoint from the environment and build a client for it.
     project_endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT")
     if not project_endpoint:
         raise HTTPException(
@@ -56,6 +57,7 @@ def get_project_client() -> AIProjectClient:
 
 
 def format_webpage_context(webpage_context: Dict[str, Any]) -> str:
+    # Flatten the CRM context into human-readable lines the agent can use in its prompt.
     context_lines = []
     for key, value in webpage_context.items():
         if isinstance(value, (dict, list)):
@@ -67,6 +69,7 @@ def format_webpage_context(webpage_context: Dict[str, Any]) -> str:
 
 
 def extract_latest_assistant_text(messages: Any) -> str:
+    # Walk the thread history until we find the newest assistant message with text content.
     for message in getattr(messages, "data", []):
         if getattr(message, "role", None) != "assistant":
             continue
@@ -84,11 +87,13 @@ def extract_latest_assistant_text(messages: Any) -> str:
 
 @app.get("/health")
 async def healthcheck() -> Dict[str, str]:
+    # Return a simple status payload so health probes can confirm the app is running.
     return {"status": "ok"}
 
 
 @app.post("/api/chat")
 async def chat_with_agent(payload: ChatRequest) -> Dict[str, str]:
+    # Create or reuse a thread, send the request to Foundry, and wait for the assistant reply.
     agent_id = os.getenv("AZURE_AI_AGENT_ID")
     if not agent_id:
         raise HTTPException(
